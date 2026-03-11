@@ -217,6 +217,70 @@ pub fn list_templates() -> Vec<(String, String, String)> {
     templates
 }
 
+/// Save a custom template to the user's templates directory
+///
+/// Creates the custom templates directory if it doesn't exist.
+/// Validates the template before saving.
+pub fn save_custom_template(template_id: &str, template: &Template) -> Result<(), String> {
+    // Sanitize template_id to prevent path traversal
+    if template_id.contains('/') || template_id.contains('\\') || template_id.contains("..") {
+        return Err("Invalid template ID: must not contain path separators".to_string());
+    }
+
+    let custom_dir = get_custom_templates_dir()
+        .ok_or_else(|| "Could not determine custom templates directory".to_string())?;
+
+    // Create directory if it doesn't exist
+    std::fs::create_dir_all(&custom_dir)
+        .map_err(|e| format!("Failed to create templates directory: {}", e))?;
+
+    let template_path = custom_dir.join(format!("{}.json", template_id));
+    let json = serde_json::to_string_pretty(template)
+        .map_err(|e| format!("Failed to serialize template: {}", e))?;
+
+    std::fs::write(&template_path, json)
+        .map_err(|e| format!("Failed to write template file: {}", e))?;
+
+    info!("Saved custom template '{}' to {:?}", template_id, template_path);
+    Ok(())
+}
+
+/// Delete a custom template from the user's templates directory
+///
+/// Returns an error if the template doesn't exist or isn't a custom template.
+pub fn delete_custom_template(template_id: &str) -> Result<(), String> {
+    // Sanitize template_id to prevent path traversal
+    if template_id.contains('/') || template_id.contains('\\') || template_id.contains("..") {
+        return Err("Invalid template ID: must not contain path separators".to_string());
+    }
+
+    let custom_dir = get_custom_templates_dir()
+        .ok_or_else(|| "Could not determine custom templates directory".to_string())?;
+
+    let template_path = custom_dir.join(format!("{}.json", template_id));
+
+    if !template_path.exists() {
+        return Err(format!("Custom template '{}' not found", template_id));
+    }
+
+    std::fs::remove_file(&template_path)
+        .map_err(|e| format!("Failed to delete template file: {}", e))?;
+
+    info!("Deleted custom template '{}' from {:?}", template_id, template_path);
+    Ok(())
+}
+
+/// Check if a template is a custom (user-created) template
+///
+/// Returns true if the template exists in the user's custom templates directory.
+pub fn is_custom_template(template_id: &str) -> bool {
+    if let Some(custom_dir) = get_custom_templates_dir() {
+        custom_dir.join(format!("{}.json", template_id)).exists()
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
