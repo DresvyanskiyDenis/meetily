@@ -194,6 +194,13 @@ jobs:
         if: ${{ github.event.inputs.sign-build != 'true' && steps.check-signing.outputs.has_key != 'true' }}
         run: |
           cd frontend
+          # Remove updater pubkey so Tauri doesn't require a private key
+          node -e "
+            const fs = require('fs');
+            const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+            delete conf.plugins.updater;
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 4));
+          "
           pnpm tauri build --target aarch64-apple-darwin ${{ steps.build-profile.outputs.args }}
 
       - name: Build Tauri app (unsigned, with updater signing)
