@@ -198,7 +198,7 @@ jobs:
           node -e "
             const fs = require('fs');
             const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-            delete conf.plugins.updater;
+            if (conf.plugins && conf.plugins.updater) { delete conf.plugins.updater.pubkey; }
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 4));
           "
           pnpm tauri build --target aarch64-apple-darwin ${{ steps.build-profile.outputs.args }}
