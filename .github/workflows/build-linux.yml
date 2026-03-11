@@ -224,6 +224,13 @@ jobs:
         if: ${{ steps.check-signing.outputs.has_key != 'true' }}
         run: |
           cd frontend
+          # Remove updater pubkey so Tauri doesn't require a private key
+          node -e "
+            const fs = require('fs');
+            const conf = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+            delete conf.plugins.updater;
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(conf, null, 4));
+          "
           pnpm tauri build --target x86_64-unknown-linux-gnu --features openblas ${{ steps.build-profile.outputs.args }}
 
       - name: Verify build artifacts
