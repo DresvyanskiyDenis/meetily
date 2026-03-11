@@ -639,6 +639,10 @@ pub fn run() {
             summary::api_list_templates,
             summary::api_get_template_details,
             summary::api_validate_template,
+            summary::api_get_template_full,
+            summary::api_save_custom_template,
+            summary::api_delete_custom_template,
+            summary::api_is_custom_template,
             // Built-in AI commands
             summary::summary_engine::builtin_ai_list_models,
             summary::summary_engine::builtin_ai_get_model_info,

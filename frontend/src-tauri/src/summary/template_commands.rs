@@ -14,6 +14,9 @@ pub struct TemplateInfo {
 
     /// Brief description of the template's purpose
     pub description: String,
+
+    /// Whether this template is a custom (user-created) template
+    pub is_custom: bool,
 }
 
 /// Detailed template structure for preview/debugging
@@ -45,14 +48,18 @@ pub async fn api_list_templates<R: Runtime>(
 ) -> Result<Vec<TemplateInfo>, String> {
     info!("api_list_templates called");
 
-    let templates = templates::list_templates();
+    let templates_list = templates::list_templates();
 
-    let template_infos: Vec<TemplateInfo> = templates
+    let template_infos: Vec<TemplateInfo> = templates_list
         .into_iter()
-        .map(|(id, name, description)| TemplateInfo {
-            id,
-            name,
-            description,
+        .map(|(id, name, description)| {
+            let is_custom = templates::is_custom_template(&id);
+            TemplateInfo {
+                id,
+                name,
+                description,
+                is_custom,
+            }
         })
         .collect();
 
@@ -121,6 +128,92 @@ pub async fn api_validate_template<R: Runtime>(
             Err(e)
         }
     }
+}
+
+/// Full template detail with section data (for template editor)
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplateFullDetails {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub is_custom: bool,
+    pub sections: Vec<TemplateSectionDetail>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplateSectionDetail {
+    pub title: String,
+    pub instruction: String,
+    pub format: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item_format: Option<String>,
+}
+
+/// Gets full template data including section instructions (for editor)
+#[tauri::command]
+pub async fn api_get_template_full<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+) -> Result<TemplateFullDetails, String> {
+    info!("api_get_template_full called for template_id: {}", template_id);
+
+    let template = templates::get_template(&template_id)?;
+    let is_custom = templates::is_custom_template(&template_id);
+
+    let details = TemplateFullDetails {
+        id: template_id.clone(),
+        name: template.name,
+        description: template.description,
+        is_custom,
+        sections: template
+            .sections
+            .into_iter()
+            .map(|s| TemplateSectionDetail {
+                title: s.title,
+                instruction: s.instruction,
+                format: s.format,
+                item_format: s.item_format,
+            })
+            .collect(),
+    };
+
+    info!("Retrieved full template details for '{}'", details.name);
+    Ok(details)
+}
+
+/// Saves a custom template to the user's templates directory
+#[tauri::command]
+pub async fn api_save_custom_template<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+    template_json: String,
+) -> Result<String, String> {
+    info!("api_save_custom_template called for template_id: {}", template_id);
+
+    let template = templates::validate_and_parse_template(&template_json)?;
+    templates::save_custom_template(&template_id, &template)?;
+
+    info!("Custom template '{}' saved successfully", template.name);
+    Ok(template.name)
+}
+
+/// Deletes a custom template from the user's templates directory
+#[tauri::command]
+pub async fn api_delete_custom_template<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+) -> Result<(), String> {
+    info!("api_delete_custom_template called for template_id: {}", template_id);
+    templates::delete_custom_template(&template_id)
+}
+
+/// Checks if a template is a custom (user-editable) template
+#[tauri::command]
+pub async fn api_is_custom_template<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    template_id: String,
+) -> Result<bool, String> {
+    Ok(templates::is_custom_template(&template_id))
 }
 
 #[cfg(test)]
