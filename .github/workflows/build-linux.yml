@@ -198,21 +198,22 @@ jobs:
           echo "Copied llama-helper to frontend/src-tauri/binaries/"
           ls -la frontend/src-tauri/binaries/
 
-      - name: Build Tauri app
+      - name: Build Tauri app (with updater signing)
+        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Tauri updater signing (ALWAYS enabled for .sig files)
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # License validation RSA public key (embedded at build time)
-          MEETILY_RSA_PUBLIC_KEY: ${{ secrets.MEETILY_RSA_PUBLIC_KEY }}
-          # Supabase configuration (for online license verification)
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         with:
           projectPath: frontend
           args: --target x86_64-unknown-linux-gnu --features openblas ${{ steps.build-profile.outputs.args }}
+
+      - name: Build Tauri app (no updater signing)
+        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY == '' }}
+        run: |
+          cd frontend
+          pnpm tauri build --target x86_64-unknown-linux-gnu --features openblas ${{ steps.build-profile.outputs.args }}
 
       - name: Verify build artifacts
         run: |
