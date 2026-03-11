@@ -178,14 +178,26 @@ jobs:
           projectPath: frontend
           args: --target aarch64-apple-darwin ${{ steps.build-profile.outputs.args }}
 
+      - name: Check if updater signing key is available
+        id: check-signing
+        if: ${{ github.event.inputs.sign-build != 'true' }}
+        run: |
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
       - name: Build Tauri app (unsigned, no updater signing)
-        if: ${{ github.event.inputs.sign-build != 'true' && !secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        if: ${{ github.event.inputs.sign-build != 'true' && steps.check-signing.outputs.has_key != 'true' }}
         run: |
           cd frontend
           pnpm tauri build --target aarch64-apple-darwin ${{ steps.build-profile.outputs.args }}
 
       - name: Build Tauri app (unsigned, with updater signing)
-        if: ${{ github.event.inputs.sign-build != 'true' && secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        if: ${{ github.event.inputs.sign-build != 'true' && steps.check-signing.outputs.has_key == 'true' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

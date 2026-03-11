@@ -198,8 +198,19 @@ jobs:
           echo "Copied llama-helper to frontend/src-tauri/binaries/"
           ls -la frontend/src-tauri/binaries/
 
+      - name: Check if updater signing key is available
+        id: check-signing
+        run: |
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
       - name: Build Tauri app (with updater signing)
-        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        if: ${{ steps.check-signing.outputs.has_key == 'true' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -210,7 +221,7 @@ jobs:
           args: --target x86_64-unknown-linux-gnu --features openblas ${{ steps.build-profile.outputs.args }}
 
       - name: Build Tauri app (no updater signing)
-        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY == '' }}
+        if: ${{ steps.check-signing.outputs.has_key != 'true' }}
         run: |
           cd frontend
           pnpm tauri build --target x86_64-unknown-linux-gnu --features openblas ${{ steps.build-profile.outputs.args }}
