@@ -6,7 +6,9 @@
 **/models/*.bin
 /.pnp
 .pnp.*
-pnpm-lock.yaml
+# pnpm-lock.yaml is intentionally tracked: same reasoning as Cargo.lock —
+# CI must resolve to the exact dependency tree the developer tested with,
+# otherwise transitive bumps silently break the build.
 package-lock.json
 .yarn/*
 !.yarn/patches
