@@ -77,4 +77,7 @@ experiments/
 target/
 
 frontend/src-tauri/binaries/
-Cargo.lock
+
+# Cargo.lock is intentionally tracked: without it, fresh CI checkouts
+# resolve to whatever the registry has at build time, and a silent
+# transitive bump (e.g. tauri-macros 2.5 → 2.6) breaks the build.
