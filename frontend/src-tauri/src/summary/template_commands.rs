@@ -181,16 +181,32 @@ pub async fn api_get_template_full<R: Runtime>(
     Ok(details)
 }
 
-/// Saves a custom template to the user's templates directory
+/// Saves a custom template to the user's templates directory.
+///
+/// `overwrite=false` (the default for "Create" / "Import" flows) refuses to
+/// stomp on an existing custom template; the UI should ask the user to pick a
+/// different name. Pass `overwrite=true` from the explicit "Edit" flow.
 #[tauri::command]
 pub async fn api_save_custom_template<R: Runtime>(
     _app: tauri::AppHandle<R>,
     template_id: String,
     template_json: String,
+    overwrite: Option<bool>,
 ) -> Result<String, String> {
-    info!("api_save_custom_template called for template_id: {}", template_id);
+    info!(
+        "api_save_custom_template called for template_id: {} (overwrite={:?})",
+        template_id, overwrite
+    );
 
     let template = templates::validate_and_parse_template(&template_json)?;
+
+    if !overwrite.unwrap_or(false) && templates::is_custom_template(&template_id) {
+        return Err(format!(
+            "A custom template with id '{}' already exists. Pick a different name or edit it directly.",
+            template_id
+        ));
+    }
+
     templates::save_custom_template(&template_id, &template)?;
 
     info!("Custom template '{}' saved successfully", template.name);

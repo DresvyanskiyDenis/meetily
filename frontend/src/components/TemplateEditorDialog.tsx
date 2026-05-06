@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from './ui/select';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface TemplateSection {
   title: string;
@@ -125,6 +125,14 @@ export function TemplateEditorDialog({
     setSections(updated);
   };
 
+  const moveSection = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= sections.length) return;
+    const updated = [...sections];
+    [updated[index], updated[target]] = [updated[target], updated[index]];
+    setSections(updated);
+  };
+
   const handleSave = async () => {
     const finalId =
       templateId ||
@@ -151,7 +159,9 @@ export function TemplateEditorDialog({
         title: s.title.trim(),
         instruction: s.instruction.trim(),
         format: s.format,
-        ...(s.item_format ? { item_format: s.item_format } : {}),
+        ...(s.format === 'list' && s.item_format?.trim()
+          ? { item_format: s.item_format.trim() }
+          : {}),
       })),
     });
 
@@ -160,6 +170,7 @@ export function TemplateEditorDialog({
       await invoke('api_save_custom_template', {
         templateId: finalId,
         templateJson,
+        overwrite: isEditing,
       });
       toast.success(`Template "${name.trim()}" saved`);
       onSaved();
@@ -214,6 +225,26 @@ export function TemplateEditorDialog({
                 className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50"
               >
                 <div className="flex items-center gap-2">
+                  <div className="flex flex-col flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => moveSection(index, -1)}
+                      disabled={index === 0}
+                      className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Move up"
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveSection(index, 1)}
+                      disabled={index === sections.length - 1}
+                      className="text-gray-400 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Move down"
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </button>
+                  </div>
                   <span className="text-xs font-medium text-gray-400 w-5 text-center flex-shrink-0">{index + 1}</span>
                   <Input
                     value={section.title}
@@ -252,6 +283,14 @@ export function TemplateEditorDialog({
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                   rows={2}
                 />
+                {section.format === 'list' && (
+                  <Input
+                    value={section.item_format ?? ''}
+                    onChange={(e) => updateSection(index, 'item_format', e.target.value)}
+                    placeholder="Optional item format (e.g., - {owner}: {action} (due {date}))"
+                    className="text-sm"
+                  />
+                )}
               </div>
             ))}
           </div>
