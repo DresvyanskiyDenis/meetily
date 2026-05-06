@@ -68,8 +68,8 @@ fn download_and_extract_ffmpeg(
 
     println!("cargo:warning=🌐 Fetching FFmpeg download URL for {}", target);
 
-    // Get platform-specific download URL
-    let url = get_ffmpeg_url_for_target(target)?;
+    // Get platform-specific download URL + pinned SHA256
+    let (url, expected_sha256) = get_ffmpeg_url_for_target(target)?;
 
     println!("cargo:warning=⬇️  Downloading from: {}", url);
 
@@ -108,6 +108,12 @@ fn download_and_extract_ffmpeg(
     }
 
     println!("cargo:warning=📦 Downloaded to: {:?}", archive_path);
+
+    // Verify SHA256 before unpacking. Fail-closed: a hash mismatch means the
+    // upstream artifact changed (or was tampered with) and we refuse to bundle it.
+    verify_archive_sha256(&archive_path, expected_sha256)?;
+    println!("cargo:warning=🔒 SHA-256 verified");
+
     println!("cargo:warning=📂 Extracting FFmpeg binary...");
 
     // Extract binary (platform-specific)
@@ -121,33 +127,91 @@ fn download_and_extract_ffmpeg(
     Ok(())
 }
 
-/// Get FFmpeg download URL for specific target triple
-fn get_ffmpeg_url_for_target(target: &str) -> Result<String, String> {
-    // Platform-specific URLs
-    let url = if target.contains("windows") {
-        // Windows
-        "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-8.0.1-essentials_build.zip"
+/// Get FFmpeg download URL and pinned SHA-256 for a specific target triple.
+///
+/// Hashes are pinned to defend against upstream tampering or accidental
+/// re-uploads of the GitHub release assets. Update both URL and hash together
+/// when bumping the FFmpeg version.
+fn get_ffmpeg_url_for_target(target: &str) -> Result<(String, &'static str), String> {
+    let (url, sha256) = if target.contains("windows") {
+        (
+            "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-8.0.1-essentials_build.zip",
+            "e2aaeaa0fdbc397d4794828086424d4aaa2102cef1fb6874f6ffd29c0b88b673",
+        )
     } else if target.contains("apple") {
         if target.contains("aarch64") {
-            // Apple Silicon (M1/M2/M3)
-            "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg80arm.zip"
+            (
+                "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg80arm.zip",
+                "0d4efcaf6a098430a708e0af694a84792938921fa126162787ae98c6151d7a95",
+            )
         } else {
-            // Intel Mac
-            "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-8.0.1.zip"
+            (
+                "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-8.0.1.zip",
+                "470e482f6e290eac92984ac12b2d67bad425b1e5269fd75fb6a3536c16e824e4",
+            )
         }
     } else if target.contains("linux") {
         if target.contains("aarch64") || target.contains("arm") {
-            // Linux ARM64
-            "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-release-arm64-static.tar.xz"
+            (
+                "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-release-arm64-static.tar.xz",
+                "f4149bb2b0784e30e99bdda85471c9b5930d3402014e934a5098b41d0f7201b1",
+            )
         } else {
-            // Linux x86_64
-            "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-release-amd64-static.tar.xz"
+            (
+                "https://github.com/Zackriya-Solutions/ffmpeg-binaries/releases/download/0.0.1/ffmpeg-release-amd64-static.tar.xz",
+                "abda8d77ce8309141f83ab8edf0596834087c52467f6badf376a6a2a4c87cf67",
+            )
         }
     } else {
         return Err(format!("Unsupported target platform: {}", target));
     };
 
-    Ok(url.to_string())
+    Ok((url.to_string(), sha256))
+}
+
+/// Stream-hash a file and compare against the pinned SHA-256 (lowercase hex).
+fn verify_archive_sha256(
+    archive_path: &std::path::Path,
+    expected: &str,
+) -> Result<(), String> {
+    use sha2::{Digest, Sha256};
+    use std::io::Read;
+
+    let mut file = std::fs::File::open(archive_path)
+        .map_err(|e| format!("Failed to open archive for hashing: {}", e))?;
+
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file
+            .read(&mut buf)
+            .map_err(|e| format!("Failed to read archive while hashing: {}", e))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+
+    let actual = hex_lower(&hasher.finalize());
+    if actual != expected {
+        return Err(format!(
+            "SHA-256 mismatch for {}\n  expected: {}\n  actual:   {}",
+            archive_path.display(),
+            expected,
+            actual,
+        ));
+    }
+    Ok(())
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        s.push(HEX[(b >> 4) as usize] as char);
+        s.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    s
 }
 
 /// Extract FFmpeg binary from downloaded archive (handles ZIP and TAR.XZ)
